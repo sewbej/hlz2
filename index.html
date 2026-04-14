@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>HLZ skaner</title>
+	<script src="html5-qrcode.min.js"></script>
+	<script src="qrcode.min.js"></script>
+	<script src="jsbarcode.min.js"></script>
+
+	<style>
+		body {
+			font-family: sans-serif;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 20px;
+			padding-top: 2px;
+			background: #f0f2f5;
+			transition: background-color 0.1s ease;
+		}
+
+		#reader-wrapper {
+			position: relative;
+			width: 100%;
+			max-width: 500px;
+			border-radius: 10px;
+			overflow: hidden;
+			background: #000;
+		}
+
+		#reader {
+			width: 100%;
+		}
+
+		#scanner-overlay {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			width: 280px;
+			height: 120px;
+			border: 2px solid rgba(255, 255, 255, 0.7);
+			border-radius: 8px;
+			pointer-events: none;
+			box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4);
+			z-index: 10;
+		}
+
+		#scanner-overlay::before,
+		#scanner-overlay::after {
+			content: "";
+			position: absolute;
+			width: 20px;
+			height: 20px;
+			border: 4px solid #007bff;
+		}
+
+		#scanner-overlay::before {
+			top: -4px;
+			left: -4px;
+			border-right: 0;
+			border-bottom: 0;
+			border-radius: 8px 0 0 0;
+		}
+
+		#scanner-overlay::after {
+			bottom: -4px;
+			right: -4px;
+			border-left: 0;
+			border-top: 0;
+			border-radius: 0 0 8px 0;
+		}
+
+		#result-container {
+			margin-top: 2px;
+			padding: 20px;
+			padding-top: 2px;
+			background: white;
+			border-radius: 10px;
+			text-align: center;
+			box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+			display: none;
+			z-index: 20;
+			position: relative;
+			width: 100%;
+			max-width: 500px;
+			box-sizing: border-box;
+		}
+
+		#result-container p {
+			margin-bottom: 0px;
+			margin-top: 2px;
+		}
+
+		#qrcode {
+			margin-top: 0px;
+			display: flex;
+			justify-content: center;
+		}
+
+		#status {
+			color: #888;
+			font-size: 0.9em;
+			margin-top: 3px;
+			text-align: center;
+			font-weight: bold;
+			min-height: 1.2em;
+		}
+
+		strong {
+			font-size: 1.4em;
+			color: #333;
+		}
+	</style>
+</head>
+
+<body>
+
+	<div id="reader-wrapper">
+		<div id="reader"></div>
+		<div id="scanner-overlay"></div>
+	</div>
+
+	<div id="status">SKANUJ KOD</div>
+
+	<div id="result-container">
+		<p><strong id="scan-result">---</strong></p>
+		<div id="qrcode"></div>
+	</div>
+
+	<script>
+		const html5QrCode = new Html5Qrcode("reader");
+		const statusText = document.getElementById('status');
+		const resultContainer = document.getElementById('result-container');
+		const scanResultText = document.getElementById('scan-result');
+		const qrContainer = document.getElementById('qrcode');
+
+		let isPaused = false; // Zmienna blokująca skanowanie
+
+const config = { 
+    fps: 25, // Zwiększamy klatkaż dla płynniejszej analizy
+    qrbox: { width: 300, height: 100 }, // Nieco większy obszar pomaga nowym matrycom
+    aspectRatio: 1.777778,
+    // Dodatkowe wskazówki dla kamery:
+    videoConstraints: {
+        focusMode: "continuous", // Wymusza ciągły autofocus
+        facingMode: "environment"
+    }
+};
+
+		function startScanner() {
+			html5QrCode.start({
+					facingMode: "environment"
+				},
+				config,
+				(decodedText) => {
+					if (isPaused) return;
+
+					if (/^\d{15}$/.test(decodedText)) {
+						processValidCode(decodedText);
+					} else {
+						statusText.innerText = "Kod nieprawidłowy (ma " + decodedText.length + " cyfr)";
+						statusText.style.color = "red";
+					}
+				}
+			).catch(err => console.error(err));
+		}
+
+		function processValidCode(code) {
+			isPaused = true; // Aktywuj blokadę
+
+			if (navigator.vibrate) {
+				navigator.vibrate(200);
+			}
+
+			statusText.innerText = "Zeskanowano poprawnie!";
+			statusText.style.color = "#002400";
+			document.body.style.backgroundColor = "#19ff19";
+
+			scanResultText.innerText = code;
+			resultContainer.style.display = 'block';
+
+			// Czyszczenie kontenera ze starych kodów
+			qrContainer.innerHTML = "";
+
+			qrContainer.style.display = "flex";
+			qrContainer.style.flexDirection = "column";
+			qrContainer.style.alignItems = "center"; // Wyśrodkowanie obu kodów
+
+			// 1. GENEROWANIE KODU 1D (Kreskowego)
+			const barcodeCanvas = document.createElement("canvas");
+			barcodeCanvas.style.marginBottom = "5px"; // Odstęp między kodem kreskowym a QR
+			qrContainer.appendChild(barcodeCanvas);
+
+			JsBarcode(barcodeCanvas, code, {
+				format: "CODE128",
+				width: 2,
+				height: 160,
+				displayValue: false
+			});
+
+			// 2. GENEROWANIE KODU QR
+			//const qrDiv = document.createElement("div");
+			//qrContainer.appendChild(qrDiv);
+
+			//new QRCode(qrDiv, {
+			//	text: code,
+			//	width: 180,
+			//	height: 180,
+			//	correctLevel: QRCode.CorrectLevel.H
+			//});
+
+			// Odblokowanie po 3 sekundach
+			setTimeout(() => {
+				isPaused = false; // Wyłącz blokadę
+				statusText.innerText = "SKANUJ KOLEJNY KOD";
+				statusText.style.color = "#888";
+				document.body.style.backgroundColor = "#f0f2f5";
+			}, 3000);
+		}
+
+		startScanner();
+	</script>
+</body>
+
+</html>
